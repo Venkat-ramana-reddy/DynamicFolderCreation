@@ -1,0 +1,56 @@
+﻿@model DynamicFolderNFileUploads.Models.PersonFile
+
+@{
+    ViewBag.Title = "Index";
+}
+
+<h2>Index</h2>
+
+@Html.LabelFor(m => m.Name)
+<br />
+@Html.DropDownListFor(m => m.Name, ViewBag.Names as SelectList, "Select Name")
+<br />
+<br />
+<input id="btnData" type="submit" value="Show Data" onclick="location.href='@Url.Action("ShowData", "FileUpload")?id='+$('#Name').val()" />
+<br />
+
+<div id="tableData">
+
+</div>
+
+<script src="~/Scripts/jquery-3.3.1.min.js"></script>
+<script src="~/Scripts/jquery.validate.unobtrusive.min.js"></script>
+
+<br />
+<input type="submit" value="Show Files" onclick="location.href='@Url.Action("ShowFile", "FileUpload")?id='+$('#Name').val()" />
+<br />
+
+@Html.ActionLink("Create new", "Create")
+
+
+
+<script>
+    $(document).ready(function () {
+        $('#ShowId').click(
+            function () {
+                var id = $('#Name').val();
+                $.ajax({
+                    url: 'Index',
+                    data: { Id: id },
+                    method: 'get',
+
+                    success: function (data) {
+                        if (data != null) {
+
+                            alert('Success');
+                        }
+                        else {
+                            alert('failed');
+                        }
+                    }
+                })
+            }
+        )
+    });
+
+</script>

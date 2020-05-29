@@ -1,0 +1,34 @@
+﻿@model DynamicFolderNFileUploads.Models.PersonFile
+
+@{
+    ViewBag.Title = "Create";
+}
+
+<h2>Create</h2>
+
+@using (Html.BeginForm("Create", "FileUpload", FormMethod.Post, new { enctype = "multipart/form-data" }))
+{
+    @Html.LabelFor(m => m.Name)
+    <br />
+    @Html.EditorFor(m => m.Name)
+    <br />
+    @Html.LabelFor(m => m.AdharCardPDF)
+    <br />
+    <input type="file" value="Adhar Card" name="Adhar" />
+    <br />
+    @Html.LabelFor(m => m.PanCard)
+    <br />
+    <input type="file" value="Pan Card" name="Pan" />
+    <br />
+    @Html.LabelFor(m => m.VoterCard)
+    <br />
+    <input type="file" value="Voter Card" name="Voter" id="image"/>
+    <br />
+    <input type="submit" value="Upload" />
+}
+
+
+@Html.ActionLink("File Details", "Index")
+
+
+

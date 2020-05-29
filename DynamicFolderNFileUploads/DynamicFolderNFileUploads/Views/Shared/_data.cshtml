@@ -1,0 +1,34 @@
+﻿@model DynamicFolderNFileUploads.Models.PersonFile
+
+
+<table border="1">
+    <tr>
+        <th>
+            @Html.LabelFor(m => m.Name)
+        </th>
+        <th>
+            @Html.LabelFor(m => m.AdharCardPDF)
+        </th>
+        <th>
+            @Html.LabelFor(m => m.PanCard)
+        </th>
+        <th>
+            @Html.LabelFor(m => m.VoterCard)
+        </th>
+    </tr>
+
+    <tr id="tableData">
+        <td>
+            @Html.DisplayFor(m => m.Name)
+        </td>
+        <td>
+            @Html.DisplayFor(m => m.AdharCardPDF)
+        </td>
+        <td>
+            @Html.DisplayFor(m => m.PanCard)
+        </td>
+        <td>
+            @Html.DisplayFor(m => m.VoterCard)
+        </td>
+    </tr>
+</table>
