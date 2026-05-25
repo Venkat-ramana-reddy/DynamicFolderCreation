@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Factory Attendance</string>
+    <string name="geo_fence_notification_title">Geo-fence Active</string>
+    <string name="geo_fence_notification_channel">Geo-fence Tracking</string>
+    <string name="geo_fence_channel_id">geo_fence_channel</string>
+</resources>
