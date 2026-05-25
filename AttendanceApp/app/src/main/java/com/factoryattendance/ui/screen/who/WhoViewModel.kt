@@ -2,6 +2,7 @@ package com.factoryattendance.ui.screen.who
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.factoryattendance.data.local.dao.WorkerDao
 import com.factoryattendance.data.preferences.AppPreferences
 import com.factoryattendance.data.repository.ShiftRepository
 import com.factoryattendance.data.repository.WorkerRepository
@@ -15,6 +16,7 @@ import javax.inject.Inject
 @HiltViewModel
 class WhoViewModel @Inject constructor(
     private val workerRepo: WorkerRepository,
+    private val workerDao: WorkerDao,
     private val shiftRepo: ShiftRepository,
     private val prefs: AppPreferences
 ) : ViewModel() {
@@ -40,7 +42,7 @@ class WhoViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             shiftRepo.seedDefaults()
-            shiftRepo.seedDefaultWorkers(workerRepo.dao())
+            shiftRepo.seedDefaultWorkers(workerDao)
         }
     }
 
