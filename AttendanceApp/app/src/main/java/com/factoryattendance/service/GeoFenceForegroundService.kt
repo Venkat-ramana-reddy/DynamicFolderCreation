@@ -39,6 +39,7 @@ class GeoFenceForegroundService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val binder = LocalBinder()
+    private lateinit var locationCallback: LocationCallback
 
     private val _locationState = MutableStateFlow(LocationState())
     val locationState: StateFlow<LocationState> = _locationState
@@ -46,7 +47,7 @@ class GeoFenceForegroundService : Service() {
     private val _checkInLog = MutableStateFlow<List<String>>(emptyList())
     val checkInLog: StateFlow<List<String>> = _checkInLog
 
-    private var wasInside = mutableMapOf<String, Boolean>()
+    private val wasInside = mutableMapOf<String, Boolean>()
 
     inner class LocalBinder : Binder() {
         fun getService(): GeoFenceForegroundService = this@GeoFenceForegroundService
@@ -63,6 +64,11 @@ class GeoFenceForegroundService : Service() {
         } else {
             startForeground(NOTIF_ID, buildNotification("Geo-fence active"))
         }
+        locationCallback = object : LocationCallback() {
+            override fun onLocationResult(result: LocationResult) {
+                result.lastLocation?.let { loc -> handleLocation(loc.latitude, loc.longitude) }
+            }
+        }
         startLocationUpdates()
     }
 
@@ -70,13 +76,8 @@ class GeoFenceForegroundService : Service() {
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 15_000L)
             .setMinUpdateDistanceMeters(10f)
             .build()
-        val callback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.let { loc -> handleLocation(loc.latitude, loc.longitude) }
-            }
-        }
         try {
-            fusedLocation.requestLocationUpdates(request, callback, Looper.getMainLooper())
+            fusedLocation.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
         } catch (_: SecurityException) { /* permission not granted */ }
     }
 
@@ -103,7 +104,6 @@ class GeoFenceForegroundService : Service() {
             workers.forEach { worker ->
                 val prevInside = wasInside[worker.id] ?: false
                 if (inside && !prevInside) {
-                    // Auto check-in
                     val record = attendanceRepo.getOrCreate(worker.id, today, worker.shift)
                     if (record.timeIn.isBlank()) {
                         val shift = shifts.find { it.name == worker.shift } ?: shifts.firstOrNull()
@@ -117,7 +117,6 @@ class GeoFenceForegroundService : Service() {
                     }
                     wasInside[worker.id] = true
                 } else if (!inside && prevInside) {
-                    // Auto check-out
                     val record = attendanceRepo.getOrCreate(worker.id, today, worker.shift)
                     if (record.timeIn.isNotBlank() && record.timeOut.isBlank()) {
                         val now = TimeUtils.nowHHMM()
@@ -140,7 +139,7 @@ class GeoFenceForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
-        fusedLocation.removeLocationUpdates { /* callback */ }
+        fusedLocation.removeLocationUpdates(locationCallback)
     }
 
     private fun createNotificationChannel() {
@@ -163,8 +162,7 @@ class GeoFenceForegroundService : Service() {
             .build()
 
     private fun updateNotification(text: String) {
-        val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIF_ID, buildNotification(text))
+        getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
     }
 
     companion object {

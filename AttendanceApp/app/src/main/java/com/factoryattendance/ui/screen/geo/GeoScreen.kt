@@ -5,7 +5,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.pm.PackageManager
 import android.os.IBinder
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,29 +23,32 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.factoryattendance.service.GeoFenceForegroundService
 import com.factoryattendance.ui.theme.*
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import com.google.accompanist.permissions.rememberMultiplePermissionsState
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeoScreen(viewModel: GeoViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    val locationPermissions = rememberMultiplePermissionsState(
-        listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-    )
+    fun hasLocationPermission() = ContextCompat.checkSelfPermission(
+        context, Manifest.permission.ACCESS_FINE_LOCATION
+    ) == PackageManager.PERMISSION_GRANTED
 
-    // Bind to service when tracking
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.values.all { it }) viewModel.onTrackingChanged(true)
+    }
+
     var service by remember { mutableStateOf<GeoFenceForegroundService?>(null) }
     val connection = remember {
         object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                val svc = (binder as? GeoFenceForegroundService.LocalBinder)?.getService()
-                service = svc
+                service = (binder as? GeoFenceForegroundService.LocalBinder)?.getService()
             }
             override fun onServiceDisconnected(name: ComponentName?) { service = null }
         }
@@ -85,8 +91,11 @@ fun GeoScreen(viewModel: GeoViewModel = hiltViewModel()) {
                     Switch(
                         checked = state.isTracking,
                         onCheckedChange = { enabled ->
-                            if (enabled && !locationPermissions.allPermissionsGranted) {
-                                locationPermissions.launchMultiplePermissionRequest()
+                            if (enabled && !hasLocationPermission()) {
+                                permissionLauncher.launch(arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                ))
                             } else {
                                 viewModel.onTrackingChanged(enabled)
                             }
@@ -94,11 +103,10 @@ fun GeoScreen(viewModel: GeoViewModel = hiltViewModel()) {
                     )
                 }
 
-                // Status indicator
                 if (state.isTracking) {
                     val loc = state.locationState
-                    val inside = loc.isInsideZone
                     val hasFactory = state.factoryLat != 0.0 || state.factoryLng != 0.0
+                    val inside = loc.isInsideZone
                     Surface(
                         shape = RoundedCornerShape(12.dp),
                         color = when {
@@ -108,43 +116,24 @@ fun GeoScreen(viewModel: GeoViewModel = hiltViewModel()) {
                         }
                     ) {
                         Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            Modifier.fillMaxWidth().padding(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
+                            Text(when { !hasFactory -> "📍"; inside -> "✅"; else -> "❌" }, fontSize = 36.sp)
                             Text(
-                                when {
-                                    !hasFactory -> "📍"
-                                    inside -> "✅"
-                                    else -> "❌"
-                                },
-                                fontSize = 36.sp
-                            )
-                            Text(
-                                when {
-                                    !hasFactory -> "Factory location not set"
-                                    inside -> "Inside factory zone"
-                                    else -> "Outside factory zone"
-                                },
+                                when { !hasFactory -> "Factory location not set"; inside -> "Inside factory zone"; else -> "Outside factory zone" },
                                 fontWeight = FontWeight.Bold,
-                                color = when {
-                                    !hasFactory -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    inside -> Green40
-                                    else -> Red40
-                                }
+                                color = when { !hasFactory -> MaterialTheme.colorScheme.onSurfaceVariant; inside -> Green40; else -> Red40 }
                             )
                             if (hasFactory && loc.distanceMeters >= 0) {
-                                Text(
-                                    "${loc.distanceMeters.toInt()}m from center · fence radius ${state.radius}m",
+                                Text("${loc.distanceMeters.toInt()}m from center · fence ${state.radius}m",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             if (loc.lat != 0.0) {
-                                Text(
-                                    "%.5f, %.5f".format(loc.lat, loc.lng),
+                                Text("%.5f, %.5f".format(loc.lat, loc.lng),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -152,34 +141,30 @@ fun GeoScreen(viewModel: GeoViewModel = hiltViewModel()) {
             }
         }
 
-        // Admin-only section
         if (state.isAdmin) {
-            // Set from here
+            // Set from GPS
             Card {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Box(Modifier.padding(14.dp)) {
                     OutlinedButton(
                         onClick = {
-                            // Use last known location
                             val loc = state.locationState
                             if (loc.lat != 0.0) viewModel.setFactoryLocation(loc.lat, loc.lng)
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Flag, null)
-                        Spacer(Modifier.width(6.dp))
+                        Icon(Icons.Default.Flag, null); Spacer(Modifier.width(6.dp))
                         Text("Set factory location from here")
                     }
                 }
             }
 
-            // Radius slider
+            // Radius
             Card {
-                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("GEO-FENCE RADIUS", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Allowed radius", Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodySmall)
+                        Text("Allowed radius", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                         Text("${state.radius}m", fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary, fontSize = 17.sp)
                     }
@@ -189,9 +174,7 @@ fun GeoScreen(viewModel: GeoViewModel = hiltViewModel()) {
                         Slider(
                             value = state.radius.toFloat(),
                             onValueChange = { viewModel.setRadius(it.toInt()) },
-                            valueRange = 50f..1000f,
-                            steps = 18,
-                            modifier = Modifier.weight(1f)
+                            valueRange = 50f..1000f, steps = 18, modifier = Modifier.weight(1f)
                         )
                         Text("1km", style = MaterialTheme.typography.labelSmall)
                     }
@@ -200,38 +183,33 @@ fun GeoScreen(viewModel: GeoViewModel = hiltViewModel()) {
 
             // Factory location info
             Card {
-                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("FACTORY LOCATION", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Latitude", style = MaterialTheme.typography.bodySmall)
-                        Text(if (state.factoryLat == 0.0) "Not set" else "%.6f".format(state.factoryLat),
-                            fontWeight = FontWeight.SemiBold)
-                    }
-                    HorizontalDivider()
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Longitude", style = MaterialTheme.typography.bodySmall)
-                        Text(if (state.factoryLng == 0.0) "Not set" else "%.6f".format(state.factoryLng),
-                            fontWeight = FontWeight.SemiBold)
-                    }
-                    HorizontalDivider()
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Radius", style = MaterialTheme.typography.bodySmall)
-                        Text("${state.radius}m", fontWeight = FontWeight.SemiBold)
+                    listOf(
+                        "Latitude" to if (state.factoryLat == 0.0) "Not set" else "%.6f".format(state.factoryLat),
+                        "Longitude" to if (state.factoryLng == 0.0) "Not set" else "%.6f".format(state.factoryLng),
+                        "Radius" to "${state.radius}m"
+                    ).forEachIndexed { i, (label, value) ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(label, style = MaterialTheme.typography.bodySmall)
+                            Text(value, fontWeight = FontWeight.SemiBold)
+                        }
+                        if (i < 2) HorizontalDivider()
                     }
                 }
             }
 
-            // Auto check-in log
+            // Log
             Card {
-                Column(modifier = Modifier.padding(14.dp)) {
+                Column(Modifier.padding(14.dp)) {
                     Text("AUTO CHECK-IN LOG", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     if (state.log.isEmpty()) {
                         Text("No events yet", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+                            modifier = Modifier.padding(vertical = 8.dp))
                     } else {
                         state.log.take(20).forEach { entry ->
                             Text(entry, style = MaterialTheme.typography.bodySmall,
@@ -241,14 +219,10 @@ fun GeoScreen(viewModel: GeoViewModel = hiltViewModel()) {
                 }
             }
         } else {
-            // Non-admin note
             Card {
-                Text(
-                    "🔒 Geo-fence settings are managed by admin. You can turn tracking on/off above.",
-                    modifier = Modifier.padding(14.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("🔒 Geo-fence settings are managed by admin. You can turn tracking on/off above.",
+                    modifier = Modifier.padding(14.dp), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
